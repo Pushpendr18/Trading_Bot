@@ -1,0 +1,105 @@
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+API_KEY = os.getenv("BINANCE_API_KEY")
+API_SECRET = os.getenv("BINANCE_API_SECRET")
+
+
+BASE_URL = "https://testnet.binancefuture.com"
+
+
+import logging
+
+logging.basicConfig(
+    filename='trading_bot.log',
+    filemode='a',
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+
+logger = logging.getLogger(_name_)
+
+
+from binance.client import Client
+
+Client = Client(api_key="your_key", api_secret="your_secret")
+
+from binance.enums import *
+from config import API_KEY, API_SECRET, BASE_URL
+from logger import logger
+
+class BasicBot:
+    def _init_(self, api_key, api_secret, testnet=True):
+        self.client = Client(api_key, api_secret)
+        if testnet:
+            self.client.FUTURES_URL = BASE_URL
+            self.client.API_URL = BASE_URL
+        logger.info("Bot initialized with Testnet: %s", testnet)
+
+    def place_order(self, symbol, side, order_type, quantity, price=None):
+        try:
+            logger.info("Placing order: %s %s %s", side, order_type, symbol)
+            if order_type == ORDER_TYPE_MARKET:
+                order = self.client.futures_create_order(
+                    symbol=symbol,
+                    side=side,
+                    type=ORDER_TYPE_MARKET,
+                    quantity=quantity
+                )
+            elif order_type == ORDER_TYPE_LIMIT:
+                order = self.client.futures_create_order(
+                    symbol=symbol,
+                    side=side,
+                    type=ORDER_TYPE_LIMIT,
+                    quantity=quantity,
+                    price=price,
+                    timeInForce=TIME_IN_FORCE_GTC
+                )
+            else:
+                raise ValueError("Unsupported order type")
+
+            logger.info("Order response: %s", order)
+            return order
+        except Exception as e:
+            logger.error("Error placing order: %s", str(e))
+            return None
+
+
+
+import argparse
+from binance.enums import *
+from bot import BasicBot
+from config import API_KEY, API_SECRET
+
+bot = BasicBot(API_KEY, API_SECRET)
+
+def main():
+    parser = argparse.ArgumentParser(description="Binance Futures Testnet Trading Bot")
+    parser.add_argument("symbol", help="Trading pair symbol (e.g., BTCUSDT)")
+    parser.add_argument("side", choices=["BUY", "SELL"], help="Order side")
+    parser.add_argument("type", choices=["MARKET", "LIMIT"], help="Order type")
+    parser.add_argument("quantity", type=float, help="Order quantity")
+    parser.add_argument("--price", type=float, help="Price for limit orders")
+
+    args = parser.parse_args()
+
+    side = SIDE_BUY if args.side == "BUY" else SIDE_SELL
+    order_type = ORDER_TYPE_MARKET if args.type == "MARKET" else ORDER_TYPE_LIMIT
+
+    order = bot.place_order(
+        symbol=args.symbol.upper(),
+        side=side,
+        order_type=order_type,
+        quantity=args.quantity,
+        price=args.price
+    )
+
+    if order:
+        print("Order placed successfully:", order)
+    else:
+        print("Order failed. Check logs for details.")
+
+if _name_ == "_main_":
+    main()
